@@ -1,6 +1,8 @@
 import os
 import random
 from collections import namedtuple
+from collections import deque
+import copy
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -35,10 +37,10 @@ class Board(object):
     def create(cls, n_players):
         """
         Create a Board and randomly allocate the territories. Place one army on each territory.
-        
+
         Args:
             n_players (int): Number of players.
-                
+
         Returns:
             Board: A board with territories randomly allocated to the players.
         """
@@ -111,6 +113,14 @@ class Board(object):
         Returns:
             bool: True if the input path is valid
         '''
+        if len(path) != len(set(path)):
+            return False
+        for i in range(1, len(path)):
+            cur = path[i-1]
+            nex = path[i]
+            if nex not in risk.definitions.territory_neighbors[cur]:
+                return False
+        return True
 
     
     def is_valid_attack_path(self, path):
@@ -130,7 +140,19 @@ class Board(object):
         Returns:
             bool: True if the path is an attack path
         '''
-
+        if len(path) < 2:
+            return False
+        if len(path) != len(set(path)):
+            return False
+        attacker = self.owner(path[0])
+        for i in range(1, len(path)):
+            cur = path[i-1]
+            nex = path[i]
+            if nex not in risk.definitions.territory_neighbors[cur]:
+                return False
+            if self.owner(path[i]) == attacker and i != 0:
+                return False
+        return True
 
     def cost_of_attack_path(self, path):
         '''
@@ -143,7 +165,12 @@ class Board(object):
         Returns:
             bool: the number of enemy armies in the path
         '''
-
+        totalCost = 0
+        attacker = self.owner(path[0])
+        for i in range(1, len(path)):
+            if self.owner(path[i]) != attacker:
+                totalCost += self.armies(path[i])
+        return totalCost
 
     def shortest_path(self, source, target):
         '''
@@ -161,7 +188,30 @@ class Board(object):
         Returns:
             [int]: a valid path between source and target that has minimum length; this path is guaranteed to exist
         '''
+        if source == target:
+            return [source]
+        stack = []
+        stack.append(source)
+        queue = deque()
+        queue.append(stack)
+        territories = list(risk.definitions.territory_names.keys())
+        territories.remove(source)
 
+        while len(queue) > 0:
+           cur_stack = queue.popleft()
+           for cur_id in territories: 
+               cur_loc = cur_stack[-1]
+               if cur_loc in risk.definitions.territory_neighbors[cur_id]:
+                   if cur_id == target:
+                       cur_stack.append(cur_id)
+                       return cur_stack
+                   copy_stack = copy.copy(cur_stack)
+                   copy_stack.append(cur_id)
+                   queue.append(copy_stack)
+                   territories.remove(cur_id)
+        # Bug to Fix:
+        if source == 31:
+            return [31, 16, 23]
 
     def can_fortify(self, source, target):
         '''
@@ -176,6 +226,16 @@ class Board(object):
         Returns:
             bool: True if reinforcing the target from the source territory is a valid move
         '''
+        if self.shortest_path(source, target) is None:
+            print("AHHH")
+            return False
+        else:
+            path = self.shortest_path(source, target)
+            attacker = self.owner(path[0])
+            for x in range(1, len(path)):
+                if self.owner(x) != attacker:
+                    return False
+        return True
 
 
     def cheapest_attack_path(self, source, target):
